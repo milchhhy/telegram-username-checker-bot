@@ -16,7 +16,7 @@ def check_username(uname: str) -> str:
     except Exception as e:
         return f"⚠️ Fehler: {e}"
 
-    # ❌ Vergeben → hat eigenes Profilbild oder Beschreibung
+    # ❌ Vergeben → Profilinfos oder eigenes Bild
     if "og:image" in html and "t_logo_2x.png" not in html:
         return "❌ Vergeben"
     if "property=\"og:description\" content=" in html and 'content=""' not in html:
@@ -28,15 +28,22 @@ def check_username(uname: str) -> str:
             frag = requests.get(frag_url, timeout=5)
             frag_html = frag.text.lower()
 
-            # 💸 Fragment nur wenn echte Auktion aktiv
-            if any(word in frag_html for word in ["auction", "bid", "price", "ending"]):
+            # 404 → kein Fragment
+            if frag.status_code == 404:
+                return "⚪ Verfügbar/Banned"
+
+            # 💸 Echte Auktion → Fragment
+            if any(word in frag_html for word in ["auction", "bid now", "current price", "ending in"]):
                 return "💸 Fragment"
 
-            # alles andere (Unavailable / Not for sale) = frei/banned
-            return "⚪ Verfügbar/Banned"
+            # "Unavailable / Not for sale" → nicht Fragment
+            if "unavailable" in frag_html or "not for sale" in frag_html:
+                return "⚪ Verfügbar/Banned"
 
         except:
             return "⚪ Verfügbar/Banned"
+
+        return "⚪ Verfügbar/Banned"
 
     return "⚠️ Unbekannt"
 
@@ -89,7 +96,7 @@ def start(update, context):
         "Schick mir Usernames (Text oder .txt-Datei).\n"
         "Kategorien:\n"
         "⚪ Verfügbar oder Banned\n"
-        "💸 Fragment (im Verkauf)\n"
+        "💸 Fragment (Auktion/Verkauf)\n"
         "❌ Vergeben"
     )
 
