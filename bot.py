@@ -4,11 +4,9 @@ import os
 import tempfile
 import pandas as pd
 
-# Bot-Token aus Heroku Config Vars
 TOKEN = os.getenv("BOT_TOKEN")
 
 def check_username(uname: str) -> str:
-    """Prüft Username über t.me-Webseite (frei, vergeben, banned)"""
     tg_url = f"https://t.me/{uname}"
     try:
         r = requests.get(tg_url, allow_redirects=True, timeout=5)
@@ -16,23 +14,19 @@ def check_username(uname: str) -> str:
     except Exception as e:
         return f"⚠️ Fehler: {e}"
 
-    # Frei → 404 oder Hinweis "username not occupied"
+    # Debug hilft: printen für Heroku Logs
+    print(f"Check {uname}: status={r.status_code}, snippet={html[:150]}")
+
     if r.status_code == 404 or "username not occupied" in html:
         return "✅ Frei"
-
-    # Vergeben → typische Telegram-Chatseite
-    if "if you have telegram, you can contact" in html:
+    if "if you have telegram" in html:
         return "❌ Vergeben"
-
-    # Banned oder reserviert
     if "this username is not available" in html or "invalid invite link" in html:
         return "🚫 Banned"
 
-    # Fallback
     return "❌ Vergeben"
 
 def check_text(update, context):
-    """Check von Usernames direkt aus Text"""
     usernames = [u.strip("@").lower() for u in update.message.text.split() if len(u) >= 4]
     free_names = [f"@{u}" for u in usernames if check_username(u) == "✅ Frei"]
 
@@ -42,7 +36,6 @@ def check_text(update, context):
         update.message.reply_text("Keine wirklich freien Usernames gefunden.")
 
 def check_file(update, context):
-    """Check von Usernames aus hochgeladener TXT-Datei"""
     file = update.message.document.get_file()
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         file.download(custom_path=tmp.name)
@@ -55,19 +48,26 @@ def check_file(update, context):
         update.message.reply_text("Keine wirklich freien Usernames in der Datei gefunden.")
         return
 
-    # CSV mit freien Namen speichern
     df = pd.DataFrame(free_data)
     out_path = tempfile.mktemp(suffix=".csv")
     df.to_csv(out_path, index=False, encoding="utf-8")
 
-    # Ergebnisse schicken
     free_names = [f"@{d['username']}" for d in free_data]
     update.message.reply_text("✅ Frei:\n" + " ".join(free_names))
     with open(out_path, "rb") as f:
         update.message.reply_document(f, filename="free_usernames.csv", caption="Liste aller freien Usernames")
 
+def debug(update, context):
+    if not context.args:
+        update.message.reply_text("Benutze: /debug <username>")
+        return
+    uname = context.args[0].strip("@").lower()
+    tg_url = f"https://t.me/{uname}"
+    r = requests.get(tg_url, allow_redirects=True, timeout=5)
+    update.message.reply_text(f"Status: {r.status_code}\nSnippet: {r.text[:300]}")
+
 def start(update, context):
-    update.message.reply_text("Schick mir Usernames (Text oder .txt-Datei). Ich zeige dir nur die, die 100% frei sind ✅")
+    update.message.reply_text("Schick mir Usernames (Text oder .txt-Datei).\nNutze /debug <username> für Rohdaten.")
 
 if __name__ == "__main__":
     print("🚀 Bot startet...")
@@ -75,6 +75,7 @@ if __name__ == "__main__":
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("debug", debug))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, check_text))
     dp.add_handler(MessageHandler(Filters.document.mime_type("text/plain"), check_file))
 
