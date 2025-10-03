@@ -17,37 +17,37 @@ def check_username(uname: str) -> str:
     except Exception as e:
         return f"⚠️ Fehler: {e}"
 
-    # ❌ Vergeben → Profil mit eigenem Bild oder Beschreibung
+    # ❌ Vergeben → Profil hat eigenes Bild oder Beschreibung
     if "og:image" in html and "t_logo_2x.png" not in html:
         return "❌ Vergeben"
     if "property=\"og:description\" content=" in html and 'content=""' not in html:
         return "❌ Vergeben"
 
-    # ⚪ Verfügbar/Banned oder Fragment
+    # ⚪ oder 💸
     if 'property="og:description" content=""' in html and "t_logo_2x.png" in html:
         try:
             frag = requests.get(frag_url, timeout=5)
-            frag_html = frag.text
+            frag_html = frag.text.lower()
 
-            # Preis finden (z. B. "123 TON", "5.5 TON")
-            price_match = re.search(r"([0-9]+(?:[.,][0-9]+)?)\s*TON", frag_html, re.IGNORECASE)
-            price = price_match.group(0).upper() if price_match else None
+            # Preis suchen (z. B. "123 ton" oder "5.5 ton")
+            price_match = re.search(r"([0-9]+(?:[.,][0-9]+)?)\s*ton", frag_html, re.IGNORECASE)
+            price = price_match.group(0).upper() if price_match else "?"
 
-            # Auction oder Buy Now nur dann, wenn Preis existiert
-            if price:
-                if re.search(r"auction|minimum bid|ending in", frag_html, re.IGNORECASE):
-                    return f"💸 Fragment – Auction – {price}"
-                if re.search(r"buy now|fixed price", frag_html, re.IGNORECASE):
-                    return f"💸 Fragment – Buy Now – {price}"
+            # Auction erkennen
+            if "auction" in frag_html or "minimum bid" in frag_html or "ending in" in frag_html:
+                return f"💸 Fragment – Auction – {price}"
 
-            # "Unavailable / Not for sale / Unknown"
-            if re.search(r"unavailable|not for sale|unknown", frag_html, re.IGNORECASE):
+            # Buy Now erkennen
+            if "buy now" in frag_html or "fixed price" in frag_html:
+                return f"💸 Fragment – Buy Now – {price}"
+
+            # Kein Verkauf → Unavailable/Not for sale
+            if "unavailable" in frag_html or "not for sale" in frag_html or "unknown" in frag_html:
                 return "⚪ Verfügbar/Banned"
 
         except:
             return "⚪ Verfügbar/Banned"
 
-        # Fallback → kein Fragment
         return "⚪ Verfügbar/Banned"
 
     return "⚠️ Unbekannt"
@@ -102,7 +102,7 @@ def start(update, context):
         "Schick mir Usernames (Text oder .txt-Datei).\n"
         "Kategorien:\n"
         "⚪ Verfügbar oder Banned\n"
-        "💸 Fragment (zeigt Preis & Auction/Buy Now)\n"
+        "💸 Fragment (mit Preis & Auction/Buy Now)\n"
         "❌ Vergeben"
     )
 
