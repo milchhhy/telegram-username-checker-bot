@@ -17,7 +17,7 @@ def check_username(uname: str) -> str:
     except Exception as e:
         return f"⚠️ Fehler: {e}"
 
-    # ❌ Vergeben → Profil mit Bild oder Bio
+    # ❌ Vergeben → Profil mit Bild oder Beschreibung
     if "og:image" in html and "t_logo_2x.png" not in html:
         return "❌ Vergeben"
     if "property=\"og:description\" content=" in html and 'content=""' not in html:
@@ -29,21 +29,33 @@ def check_username(uname: str) -> str:
             frag = requests.get(frag_url, timeout=5)
             frag_html = frag.text
 
-            # Preis finden (auch wenn getrennt, z. B. <span>TON</span>)
-            price_match = re.search(r"([0-9]+(?:[.,][0-9]+)?)\s*<[^>]*>?\s*ton", frag_html, re.IGNORECASE)
+            # --- Preis robust suchen ---
+            price_match = re.search(r"([0-9]+(?:[.,][0-9]+)?)\s*ton", frag_html, re.IGNORECASE)
             if not price_match:
-                price_match = re.search(r"([0-9]+(?:[.,][0-9]+)?)\s*ton", frag_html, re.IGNORECASE)
+                # auch wenn TON in eigenem <span> steht
+                price_match = re.search(
+                    r"([0-9]+(?:[.,][0-9]+)?)\s*(?:<[^>]+>\s*)*ton",
+                    frag_html,
+                    re.IGNORECASE
+                )
+            if not price_match:
+                # Klassen wie lot-price / amount
+                price_match = re.search(
+                    r'(?:lot-price|amount|price)[^<]*?>\s*([0-9]+(?:[.,][0-9]+)?)',
+                    frag_html,
+                    re.IGNORECASE
+                )
 
             price = price_match.group(1) + " TON" if price_match else None
 
-            # Nur Fragment, wenn Preis + Auction/BuyNow-Kennung vorhanden
+            # --- Auction oder BuyNow ---
             if price:
                 if re.search(r"auction|minimum bid|ending in", frag_html, re.IGNORECASE):
                     return f"💸 Fragment – Auction – {price}"
                 if re.search(r"buy now|fixed price", frag_html, re.IGNORECASE):
                     return f"💸 Fragment – Buy Now – {price}"
 
-            # Ohne Preis oder nur "Unavailable" → kein Fragment
+            # Kein Preis / Unavailable → kein Fragment
             if re.search(r"unavailable|not for sale|unknown", frag_html, re.IGNORECASE):
                 return "⚪ Verfügbar/Banned"
 
