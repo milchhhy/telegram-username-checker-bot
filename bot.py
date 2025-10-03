@@ -17,7 +17,7 @@ def check_username(uname: str) -> str:
 
     if r.status_code == 404:
         frag = requests.get(frag_url, timeout=5)
-        if "auction" in frag.text.lower() or "Lot" in frag.text:
+        if "auction" in frag.text.lower() or "lot" in frag.text.lower():
             return "💸 Fragment"
         else:
             return "✅ Frei"
@@ -59,7 +59,7 @@ def check_file(update, context):
     out_path = tempfile.mktemp(suffix=".csv")
     df.to_csv(out_path, index=False, encoding="utf-8")
 
-    # Ergebnisse schicken
+    # Ergebnisse im Chat + Datei
     update.message.reply_text(format_results(data))
     with open(out_path, "rb") as f:
         update.message.reply_document(f, filename="results.csv", caption="Hier die CSV mit allen Ergebnissen ✅")
@@ -67,12 +67,15 @@ def check_file(update, context):
 def start(update, context):
     update.message.reply_text("Schick mir Usernames (Text oder .txt-Datei).")
 
-updater = Updater(TOKEN, use_context=True)
-dp = updater.dispatcher
+if __name__ == "__main__":
+    print("🚀 Bot startet...")
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
 
-dp.add_handler(CommandHandler("start", start))
-dp.add_handler(MessageHandler(Filters.text & ~Filters.command, check_text))
-dp.add_handler(MessageHandler(Filters.document.mime_type("text/plain"), check_file))
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, check_text))
+    dp.add_handler(MessageHandler(Filters.document.mime_type("text/plain"), check_file))
 
-updater.start_polling()
-updater.idle()
+    updater.start_polling()
+    print("✅ Bot läuft (Polling aktiv)")
+    updater.idle()
