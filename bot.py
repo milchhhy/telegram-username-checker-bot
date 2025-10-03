@@ -11,21 +11,29 @@ def check_username(uname: str) -> str:
     frag_url = f"https://fragment.com/username/{uname}"
 
     try:
-        r = requests.get(tg_url, allow_redirects=False, timeout=5)
+        r = requests.get(tg_url, allow_redirects=True, timeout=5)
+        html = r.text.lower()
     except:
         return "⚠️ Fehler"
 
-    if r.status_code == 404:
+    # Frei?
+    if r.status_code == 404 or "username not occupied" in html:
         frag = requests.get(frag_url, timeout=5)
         if "auction" in frag.text.lower() or "lot" in frag.text.lower():
             return "💸 Fragment"
         else:
             return "✅ Frei"
-    else:
-        if "If you have Telegram, you can contact" in r.text:
-            return "❌ Vergeben"
-        else:
-            return "🚫 Banned"
+
+    # Vergeben
+    if "if you have telegram, you can contact" in html:
+        return "❌ Vergeben"
+
+    # Banned oder ungültig
+    if "this username is not available" in html or "invalid invite link" in html:
+        return "🚫 Banned"
+
+    # Fallback
+    return "❌ Vergeben"
 
 def format_results(data):
     free = [f"@{d['username']}" for d in data if d['status'] == "✅ Frei"]
