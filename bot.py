@@ -5,53 +5,37 @@ import tempfile
 import pandas as pd
 
 TOKEN = os.getenv("BOT_TOKEN")
+API_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 def check_username(uname: str) -> str:
-    tg_url = f"https://t.me/{uname}"
-    frag_url = f"https://fragment.com/username/{uname}"
-
+    """Prüft Username mit offizieller Telegram-API"""
+    url = f"{API_URL}/getChat?username={uname}"
     try:
-        r = requests.get(tg_url, allow_redirects=True, timeout=5)
-        html = r.text.lower()
+        r = requests.get(url, timeout=5)
+        data = r.json()
     except:
         return "⚠️ Fehler"
 
-    # Frei?
-    if r.status_code == 404 or "username not occupied" in html:
-        frag = requests.get(frag_url, timeout=5)
-        if "auction" in frag.text.lower() or "lot" in frag.text.lower():
-            return "💸 Fragment"
-        else:
-            return "✅ Frei"
-
-    # Vergeben
-    if "if you have telegram, you can contact" in html:
+    if "ok" in data and data["ok"] is True:
         return "❌ Vergeben"
-
-    # Banned oder ungültig
-    if "this username is not available" in html or "invalid invite link" in html:
-        return "🚫 Banned"
-
-    # Fallback
-    return "❌ Vergeben"
-
-def format_results(data):
-    free = [f"@{d['username']}" for d in data if d['status'] == "✅ Frei"]
-    frag = [f"@{d['username']}" for d in data if d['status'] == "💸 Fragment"]
-    taken = [f"@{d['username']}" for d in data if d['status'] == "❌ Vergeben"]
-    banned = [f"@{d['username']}" for d in data if d['status'] == "🚫 Banned"]
-
-    msg = []
-    if free: msg.append("✅ Frei:\n" + " ".join(free))
-    if frag: msg.append("💸 Fragment:\n" + " ".join(frag))
-    if taken: msg.append("❌ Vergeben:\n" + " ".join(taken))
-    if banned: msg.append("🚫 Banned:\n" + " ".join(banned))
-    return "\n\n".join(msg) if msg else "Keine Ergebnisse."
+    elif "description" in data:
+        desc = data["description"].upper()
+        if "USERNAME_NOT_OCCUPIED" in desc:
+            return "✅ Frei"
+        elif "USERNAME_INVALID" in desc:
+            return "🚫 Banned"
+        elif "USERNAME_OCCUPIED" in desc:
+            return "❌ Vergeben"
+    return "⚠️ Unbekannt"
 
 def check_text(update, context):
     usernames = [u.strip("@").lower() for u in update.message.text.split() if len(u) >= 4]
-    data = [{"username": u, "status": check_username(u)} for u in usernames]
-    update.message.reply_text(format_results(data))
+    free_names = [f"@{u}" for u in usernames if check_username(u) == "✅ Frei"]
+
+    if free_names:
+        update.message.reply_text("✅ Frei:\n" + " ".join(free_names))
+    else:
+        update.message.reply_text("Keine wirklich freien Usernames gefunden.")
 
 def check_file(update, context):
     file = update.message.document.get_file()
@@ -60,20 +44,25 @@ def check_file(update, context):
         with open(tmp.name, "r", encoding="utf-8") as f:
             usernames = [line.strip().lower().replace("@", "") for line in f if line.strip()]
 
-    data = [{"username": u, "status": check_username(u)} for u in usernames]
+    free_data = [{"username": u, "status": "✅ Frei"} for u in usernames if check_username(u) == "✅ Frei"]
 
-    # CSV speichern
-    df = pd.DataFrame(data)
+    if not free_data:
+        update.message.reply_text("Keine wirklich freien Usernames in der Datei gefunden.")
+        return
+
+    # CSV mit nur freien Namen speichern
+    df = pd.DataFrame(free_data)
     out_path = tempfile.mktemp(suffix=".csv")
     df.to_csv(out_path, index=False, encoding="utf-8")
 
-    # Ergebnisse im Chat + Datei
-    update.message.reply_text(format_results(data))
+    # Ergebnisse schicken
+    free_names = [f"@{d['username']}" for d in free_data]
+    update.message.reply_text("✅ Frei:\n" + " ".join(free_names))
     with open(out_path, "rb") as f:
-        update.message.reply_document(f, filename="results.csv", caption="Hier die CSV mit allen Ergebnissen ✅")
+        update.message.reply_document(f, filename="free_usernames.csv", caption="Liste aller freien Usernames")
 
 def start(update, context):
-    update.message.reply_text("Schick mir Usernames (Text oder .txt-Datei).")
+    update.message.reply_text("Schick mir Usernames (Text oder .txt-Datei). Ich zeige dir nur die, die 100% frei sind ✅")
 
 if __name__ == "__main__":
     print("🚀 Bot startet...")
