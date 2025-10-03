@@ -28,18 +28,18 @@ def check_username(uname: str) -> str:
             frag = requests.get(frag_url, timeout=5)
             frag_html = frag.text.lower()
 
-            # 💸 Fragment nur bei echten Auktionen
-            if any(word in frag_html for word in ["auction", "bid now", "current price", "ending in"]):
+            # 💸 Echte Auktion → nur wenn klarer Auction-/Lot-Block
+            if "<h2>auction</h2>" in frag_html or 'class="lot-header"' in frag_html:
                 return "💸 Fragment"
 
-            # "Unavailable / Not for sale / Unknown" = kein Fragment
-            if any(word in frag_html for word in ["unavailable", "not for sale", "unknown"]):
+            # Unavailable / Not for sale / Unknown → nicht Fragment
+            if "unavailable" in frag_html or "not for sale" in frag_html or "unknown" in frag_html:
                 return "⚪ Verfügbar/Banned"
 
         except:
             return "⚪ Verfügbar/Banned"
 
-        # Fallback = auch kein Fragment
+        # Fallback: alles ohne Auktion = Verfügbar/Banned
         return "⚪ Verfügbar/Banned"
 
     return "⚠️ Unbekannt"
