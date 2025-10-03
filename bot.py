@@ -6,32 +6,30 @@ import pandas as pd
 
 # Bot-Token aus Heroku Config Vars
 TOKEN = os.getenv("BOT_TOKEN")
-API_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 def check_username(uname: str) -> str:
-    """Prüft, ob Username frei, vergeben oder banned ist (Telegram API)"""
-    url = f"{API_URL}/getChat?username={uname}"
+    """Prüft Username über t.me-Webseite (frei, vergeben, banned)"""
+    tg_url = f"https://t.me/{uname}"
     try:
-        r = requests.get(url, timeout=5)
-        data = r.json()
+        r = requests.get(tg_url, allow_redirects=True, timeout=5)
+        html = r.text.lower()
     except Exception as e:
         return f"⚠️ Fehler: {e}"
 
-    # Wenn Chat existiert -> vergeben
-    if data.get("ok") is True:
+    # Frei → 404 oder Hinweis "username not occupied"
+    if r.status_code == 404 or "username not occupied" in html:
+        return "✅ Frei"
+
+    # Vergeben → typische Telegram-Chatseite
+    if "if you have telegram, you can contact" in html:
         return "❌ Vergeben"
 
-    # Fehlerbeschreibung prüfen
-    desc = data.get("description", "").lower()
-
-    if "not occupied" in desc or "chat not found" in desc:
-        return "✅ Frei"     # wirklich claimbar
-    if "invalid" in desc:
+    # Banned oder reserviert
+    if "this username is not available" in html or "invalid invite link" in html:
         return "🚫 Banned"
-    if "occupied" in desc:
-        return "❌ Vergeben"
 
-    return f"⚠️ Unbekannt ({desc})"
+    # Fallback
+    return "❌ Vergeben"
 
 def check_text(update, context):
     """Check von Usernames direkt aus Text"""
