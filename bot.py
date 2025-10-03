@@ -17,38 +17,41 @@ def check_username(uname: str) -> str:
     except Exception as e:
         return f"⚠️ Fehler: {e}"
 
-    # ❌ Vergeben → Profilinfos oder eigenes Bild
+    # ❌ Vergeben → Profil mit eigenem Bild oder Beschreibung
     if "og:image" in html and "t_logo_2x.png" not in html:
         return "❌ Vergeben"
     if "property=\"og:description\" content=" in html and 'content=""' not in html:
         return "❌ Vergeben"
 
-    # ⚪ Verfügbar/Banned → Standardlogo + leere Beschreibung
+    # ⚪ Verfügbar/Banned oder Fragment
     if 'property="og:description" content=""' in html and "t_logo_2x.png" in html:
         try:
             frag = requests.get(frag_url, timeout=5)
-            frag_html = frag.text.lower()
+            frag_html = frag.text
 
-            # 💸 Preis finden (z. B. "123 ton")
-            price_match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*ton", frag_html)
-            price = price_match.group(0).upper() if price_match else "?"
+            # Preis finden (z. B. "123 TON", "5.5 TON")
+            price_match = re.search(r"([0-9]+(?:[.,][0-9]+)?)\s*TON", frag_html, re.IGNORECASE)
+            price = price_match.group(0).upper() if price_match else None
 
-            # Auktion oder Sofortkauf bestimmen
-            if "auction" in frag_html or "minimum bid" in frag_html:
-                return f"💸 Fragment – Auction – {price}"
-            if "buy now" in frag_html or "fixed price" in frag_html:
-                return f"💸 Fragment – Buy Now – {price}"
+            # Auction oder Buy Now nur dann, wenn Preis existiert
+            if price:
+                if re.search(r"auction|minimum bid|ending in", frag_html, re.IGNORECASE):
+                    return f"💸 Fragment – Auction – {price}"
+                if re.search(r"buy now|fixed price", frag_html, re.IGNORECASE):
+                    return f"💸 Fragment – Buy Now – {price}"
 
-            # Nicht im Verkauf → frei/banned
-            if "unavailable" in frag_html or "not for sale" in frag_html or "unknown" in frag_html:
+            # "Unavailable / Not for sale / Unknown"
+            if re.search(r"unavailable|not for sale|unknown", frag_html, re.IGNORECASE):
                 return "⚪ Verfügbar/Banned"
 
         except:
             return "⚪ Verfügbar/Banned"
 
+        # Fallback → kein Fragment
         return "⚪ Verfügbar/Banned"
 
     return "⚠️ Unbekannt"
+
 
 def check_text(update, context):
     usernames = [u.strip("@").lower() for u in update.message.text.split() if len(u) >= 4]
@@ -64,6 +67,7 @@ def check_text(update, context):
     if taken: msg.append("❌ Vergeben:\n" + " ".join(taken))
 
     update.message.reply_text("\n\n".join(msg) if msg else "Keine Ergebnisse.")
+
 
 def check_file(update, context):
     file = update.message.document.get_file()
@@ -92,14 +96,16 @@ def check_file(update, context):
     with open(out_path, "rb") as f:
         update.message.reply_document(f, filename="results.csv", caption="CSV mit allen geprüften Usernames")
 
+
 def start(update, context):
     update.message.reply_text(
         "Schick mir Usernames (Text oder .txt-Datei).\n"
         "Kategorien:\n"
         "⚪ Verfügbar oder Banned\n"
-        "💸 Fragment (zeigt Preis & Auction/BuyNow)\n"
+        "💸 Fragment (zeigt Preis & Auction/Buy Now)\n"
         "❌ Vergeben"
     )
+
 
 if __name__ == "__main__":
     print("🚀 Bot startet...")
