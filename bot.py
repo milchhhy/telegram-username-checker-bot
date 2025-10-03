@@ -16,7 +16,7 @@ def check_username(uname: str) -> str:
     except Exception as e:
         return f"⚠️ Fehler: {e}"
 
-    # ❌ Vergeben → hat eigenes Profilbild oder Beschreibung
+    # ❌ Vergeben → Profilinfos oder eigenes Bild
     if "og:image" in html and "t_logo_2x.png" not in html:
         return "❌ Vergeben"
     if "property=\"og:description\" content=" in html and 'content=""' not in html:
@@ -27,10 +27,18 @@ def check_username(uname: str) -> str:
         try:
             frag = requests.get(frag_url, timeout=5)
             frag_html = frag.text.lower()
-            if "auction" in frag_html or "lot" in frag_html:
+
+            # wenn Fragment-Seite nicht existiert → nicht Fragment
+            if frag.status_code == 404:
+                return "⚪ Verfügbar/Banned"
+
+            # nur Fragment, wenn wirklich Auction/Lot im <title> oder Body
+            if ("<title>" in frag_html and "auction" in frag_html) or "lot" in frag_html:
                 return "💸 Fragment"
+
         except:
-            pass
+            return "⚪ Verfügbar/Banned"
+
         return "⚪ Verfügbar/Banned"
 
     return "⚠️ Unbekannt"
