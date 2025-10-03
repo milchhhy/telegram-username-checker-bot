@@ -20,21 +20,19 @@ def check_username(uname: str) -> str:
     if "this username is not available" in html or "invalid invite link" in html:
         return "🚫 Banned"
 
-    # 💸 Fragment prüfen
-    try:
-        frag = requests.get(frag_url, timeout=5)
-        frag_html = frag.text.lower()
-        if "auction" in frag_html or "lot" in frag_html:
-            return "💸 Fragment"
-    except:
-        pass
-
-    # ❌ Vergeben (Profilinfos vorhanden)
+    # ❌ Vergeben (Profilinfos gefunden)
     if "tgme_page_title" in html or "tgme_page_description" in html:
         return "❌ Vergeben"
 
     # ✅ Frei (Contact-Seite ohne Profilinfos)
     if f"telegram: contact @{uname}".lower() in html and "tgme_page_title" not in html:
+        try:
+            frag = requests.get(frag_url, timeout=5)
+            frag_html = frag.text.lower()
+            if "auction" in frag_html or "lot" in frag_html:
+                return "💸 Fragment"
+        except:
+            pass
         return "✅ Frei"
 
     return "⚠️ Unbekannt"
@@ -53,6 +51,7 @@ def check_file(update, context):
 
     data = [{"username": u, "status": check_username(u)} for u in usernames]
 
+    # CSV speichern
     df = pd.DataFrame(data)
     out_path = tempfile.mktemp(suffix=".csv")
     df.to_csv(out_path, index=False, encoding="utf-8")
