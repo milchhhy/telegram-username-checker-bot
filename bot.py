@@ -28,21 +28,18 @@ def check_username(uname: str) -> str:
             frag = requests.get(frag_url, timeout=5)
             frag_html = frag.text.lower()
 
-            # 404 → kein Fragment
-            if frag.status_code == 404:
-                return "⚪ Verfügbar/Banned"
-
-            # 💸 Echte Auktion → Fragment
+            # 💸 Fragment nur bei echten Auktionen
             if any(word in frag_html for word in ["auction", "bid now", "current price", "ending in"]):
                 return "💸 Fragment"
 
-            # "Unavailable / Not for sale" → nicht Fragment
-            if "unavailable" in frag_html or "not for sale" in frag_html:
+            # "Unavailable / Not for sale / Unknown" = kein Fragment
+            if any(word in frag_html for word in ["unavailable", "not for sale", "unknown"]):
                 return "⚪ Verfügbar/Banned"
 
         except:
             return "⚪ Verfügbar/Banned"
 
+        # Fallback = auch kein Fragment
         return "⚪ Verfügbar/Banned"
 
     return "⚠️ Unbekannt"
@@ -51,7 +48,6 @@ def check_text(update, context):
     usernames = [u.strip("@").lower() for u in update.message.text.split() if len(u) >= 4]
     data = [{"username": u, "status": check_username(u)} for u in usernames]
 
-    # Gruppierte Ausgabe
     available = [f"@{d['username']}" for d in data if d['status'] == "⚪ Verfügbar/Banned"]
     frag = [f"@{d['username']}" for d in data if d['status'] == "💸 Fragment"]
     taken = [f"@{d['username']}" for d in data if d['status'] == "❌ Vergeben"]
@@ -77,7 +73,6 @@ def check_file(update, context):
     out_path = tempfile.mktemp(suffix=".csv")
     df.to_csv(out_path, index=False, encoding="utf-8")
 
-    # Gruppierte Ausgabe
     available = [f"@{d['username']}" for d in data if d['status'] == "⚪ Verfügbar/Banned"]
     frag = [f"@{d['username']}" for d in data if d['status'] == "💸 Fragment"]
     taken = [f"@{d['username']}" for d in data if d['status'] == "❌ Vergeben"]
@@ -96,7 +91,7 @@ def start(update, context):
         "Schick mir Usernames (Text oder .txt-Datei).\n"
         "Kategorien:\n"
         "⚪ Verfügbar oder Banned\n"
-        "💸 Fragment (Auktion/Verkauf)\n"
+        "💸 Fragment (nur echte Auktion)\n"
         "❌ Vergeben"
     )
 
