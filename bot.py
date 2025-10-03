@@ -3,6 +3,7 @@ import requests
 import os
 import tempfile
 import pandas as pd
+import re
 
 TOKEN = os.getenv("BOT_TOKEN")
 
@@ -28,18 +29,23 @@ def check_username(uname: str) -> str:
             frag = requests.get(frag_url, timeout=5)
             frag_html = frag.text.lower()
 
-            # 💸 Echte Auktion → nur wenn klarer Auction-/Lot-Block
-            if "<h2>auction</h2>" in frag_html or 'class="lot-header"' in frag_html:
-                return "💸 Fragment"
+            # 💸 Preis finden (z. B. "123 ton")
+            price_match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*ton", frag_html)
+            price = price_match.group(0).upper() if price_match else "?"
 
-            # Unavailable / Not for sale / Unknown → nicht Fragment
+            # Auktion oder Sofortkauf bestimmen
+            if "auction" in frag_html or "minimum bid" in frag_html:
+                return f"💸 Fragment – Auction – {price}"
+            if "buy now" in frag_html or "fixed price" in frag_html:
+                return f"💸 Fragment – Buy Now – {price}"
+
+            # Nicht im Verkauf → frei/banned
             if "unavailable" in frag_html or "not for sale" in frag_html or "unknown" in frag_html:
                 return "⚪ Verfügbar/Banned"
 
         except:
             return "⚪ Verfügbar/Banned"
 
-        # Fallback: alles ohne Auktion = Verfügbar/Banned
         return "⚪ Verfügbar/Banned"
 
     return "⚠️ Unbekannt"
@@ -48,13 +54,13 @@ def check_text(update, context):
     usernames = [u.strip("@").lower() for u in update.message.text.split() if len(u) >= 4]
     data = [{"username": u, "status": check_username(u)} for u in usernames]
 
-    available = [f"@{d['username']}" for d in data if d['status'] == "⚪ Verfügbar/Banned"]
-    frag = [f"@{d['username']}" for d in data if d['status'] == "💸 Fragment"]
+    available = [f"@{d['username']}" for d in data if d['status'].startswith("⚪")]
+    frag = [f"@{d['username']} ({d['status']})" for d in data if d['status'].startswith("💸")]
     taken = [f"@{d['username']}" for d in data if d['status'] == "❌ Vergeben"]
 
     msg = []
     if available: msg.append("⚪ Verfügbar/Banned:\n" + " ".join(available))
-    if frag: msg.append("💸 Fragment:\n" + " ".join(frag))
+    if frag: msg.append("💸 Fragment:\n" + "\n".join(frag))
     if taken: msg.append("❌ Vergeben:\n" + " ".join(taken))
 
     update.message.reply_text("\n\n".join(msg) if msg else "Keine Ergebnisse.")
@@ -73,13 +79,13 @@ def check_file(update, context):
     out_path = tempfile.mktemp(suffix=".csv")
     df.to_csv(out_path, index=False, encoding="utf-8")
 
-    available = [f"@{d['username']}" for d in data if d['status'] == "⚪ Verfügbar/Banned"]
-    frag = [f"@{d['username']}" for d in data if d['status'] == "💸 Fragment"]
+    available = [f"@{d['username']}" for d in data if d['status'].startswith("⚪")]
+    frag = [f"@{d['username']} ({d['status']})" for d in data if d['status'].startswith("💸")]
     taken = [f"@{d['username']}" for d in data if d['status'] == "❌ Vergeben"]
 
     msg = []
     if available: msg.append("⚪ Verfügbar/Banned:\n" + " ".join(available))
-    if frag: msg.append("💸 Fragment:\n" + " ".join(frag))
+    if frag: msg.append("💸 Fragment:\n" + "\n".join(frag))
     if taken: msg.append("❌ Vergeben:\n" + " ".join(taken))
 
     update.message.reply_text("\n\n".join(msg) if msg else "Keine Ergebnisse.")
@@ -91,7 +97,7 @@ def start(update, context):
         "Schick mir Usernames (Text oder .txt-Datei).\n"
         "Kategorien:\n"
         "⚪ Verfügbar oder Banned\n"
-        "💸 Fragment (nur echte Auktion)\n"
+        "💸 Fragment (zeigt Preis & Auction/BuyNow)\n"
         "❌ Vergeben"
     )
 
