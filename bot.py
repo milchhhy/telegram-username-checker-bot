@@ -16,11 +16,17 @@ def check_username(uname: str) -> str:
     except Exception as e:
         return f"⚠️ Fehler: {e}"
 
-    # 🚫 Banned
-    if "this username is not available" in html:
+    # 🚫 Banned (immer zuerst!)
+    if "this username is not available" in html or "username is not available" in html:
         return "🚫 Banned"
 
-    # ✅ Frei oder 💸 Fragment → Standardlogo + leere Beschreibung
+    # ❌ Vergeben (Profilinfos oder eigenes Bild)
+    if "og:image" in html and "t_logo_2x.png" not in html:
+        return "❌ Vergeben"
+    if "property=\"og:description\" content=" in html and 'content=""' not in html:
+        return "❌ Vergeben"
+
+    # ✅ Frei → Standardlogo + leere Beschreibung
     if 'property="og:description" content=""' in html and "telegram.org/img/t_logo_2x.png" in html:
         try:
             frag = requests.get(frag_url, timeout=5)
@@ -31,11 +37,9 @@ def check_username(uname: str) -> str:
             pass
         return "✅ Frei"
 
-    # ❌ Vergeben (Profilinfos oder anderes Bild)
-    return "❌ Vergeben"
+    return "⚠️ Unbekannt"
 
 def check_text(update, context):
-    """Check Usernames aus einer Text-Nachricht"""
     usernames = [u.strip("@").lower() for u in update.message.text.split() if len(u) >= 4]
     data = [{"username": u, "status": check_username(u)} for u in usernames]
 
@@ -54,7 +58,6 @@ def check_text(update, context):
     update.message.reply_text("\n\n".join(msg) if msg else "Keine Ergebnisse.")
 
 def check_file(update, context):
-    """Check Usernames aus einer hochgeladenen TXT-Datei"""
     file = update.message.document.get_file()
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         file.download(custom_path=tmp.name)
@@ -85,9 +88,11 @@ def check_file(update, context):
         update.message.reply_document(f, filename="results.csv", caption="CSV mit allen geprüften Usernames")
 
 def start(update, context):
-    update.message.reply_text("Schick mir Usernames (Text oder .txt-Datei).\n"
-                              "Ich zeige dir an:\n"
-                              "✅ frei\n❌ vergeben\n🚫 banned\n💸 fragment")
+    update.message.reply_text(
+        "Schick mir Usernames (Text oder .txt-Datei).\n"
+        "Ich zeige dir an:\n"
+        "✅ frei\n💸 fragment\n❌ vergeben\n🚫 banned"
+    )
 
 if __name__ == "__main__":
     print("🚀 Bot startet...")
