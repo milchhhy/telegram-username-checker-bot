@@ -17,23 +17,25 @@ def check_username(uname: str) -> str:
         return f"⚠️ Fehler: {e}"
 
     # 🚫 Banned
-    if "this username is not available" in html or "invalid invite link" in html:
+    if "this username is not available" in html:
         return "🚫 Banned"
 
-    # ❌ Vergeben (Profilinfos gefunden)
-    if "tgme_page_title" in html or "tgme_page_description" in html:
-        return "❌ Vergeben"
+    # 💸 Fragment prüfen nur wenn nicht banned
+    try:
+        frag = requests.get(frag_url, timeout=5)
+        frag_html = frag.text.lower()
+        if "auction" in frag_html or "lot" in frag_html:
+            return "💸 Fragment"
+    except:
+        pass
 
-    # ✅ Frei (Contact-Seite ohne Profilinfos)
-    if f"telegram: contact @{uname}".lower() in html and "tgme_page_title" not in html:
-        try:
-            frag = requests.get(frag_url, timeout=5)
-            frag_html = frag.text.lower()
-            if "auction" in frag_html or "lot" in frag_html:
-                return "💸 Fragment"
-        except:
-            pass
+    # ✅ Frei (Contact-Seite ohne zusätzliche Infos)
+    if f"telegram: contact @{uname}".lower() in html and "tgme_page_extra" not in html and "tgme_page_description" not in html:
         return "✅ Frei"
+
+    # ❌ Vergeben (Infos vorhanden)
+    if "tgme_page_description" in html or "tgme_page_extra" in html:
+        return "❌ Vergeben"
 
     return "⚠️ Unbekannt"
 
@@ -51,29 +53,28 @@ def check_file(update, context):
 
     data = [{"username": u, "status": check_username(u)} for u in usernames]
 
-    # CSV speichern
     df = pd.DataFrame(data)
     out_path = tempfile.mktemp(suffix=".csv")
     df.to_csv(out_path, index=False, encoding="utf-8")
 
-    # Gruppierte Ausgabe
-    free = [f"@{d['username']}" for d in data if d['status'] == "✅ Frei"]
-    frag = [f"@{d['username']}" for d in data if d['status'] == "💸 Fragment"]
-    taken = [f"@{d['username']}" for d in data if d['status'] == "❌ Vergeben"]
-    banned = [f"@{d['username']}" for d in data if d['status'] == "🚫 Banned"]
-
-    msg = []
-    if free: msg.append("✅ Frei:\n" + " ".join(free))
-    if frag: msg.append("💸 Fragment:\n" + " ".join(frag))
-    if taken: msg.append("❌ Vergeben:\n" + " ".join(taken))
-    if banned: msg.append("🚫 Banned:\n" + " ".join(banned))
-
-    update.message.reply_text("\n\n".join(msg) if msg else "Keine Ergebnisse.")
+    msg = "\n".join([f"@{d['username']}: {d['status']}" for d in data])
+    update.message.reply_text(msg if msg else "Keine Ergebnisse.")
     with open(out_path, "rb") as f:
         update.message.reply_document(f, filename="results.csv", caption="CSV mit allen geprüften Usernames")
 
+def debug(update, context):
+    if not context.args:
+        update.message.reply_text("Nutze: /debug <username>")
+        return
+    uname = context.args[0].strip("@").lower()
+    tg_url = f"https://t.me/{uname}"
+    r = requests.get(tg_url, allow_redirects=True, timeout=5)
+
+    snippet = r.text[:800]  # ersten 800 Zeichen anzeigen
+    update.message.reply_text(f"Status: {r.status_code}\nSnippet:\n{snippet}")
+
 def start(update, context):
-    update.message.reply_text("Schick mir Usernames (Text oder .txt-Datei). Ich zeige dir an: ✅ frei / ❌ vergeben / 🚫 banned / 💸 fragment.")
+    update.message.reply_text("Schick mir Usernames (Text oder .txt-Datei).\nNutze /debug <username> für HTML-Snippets.")
 
 if __name__ == "__main__":
     print("🚀 Bot startet...")
@@ -81,6 +82,7 @@ if __name__ == "__main__":
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("debug", debug))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, check_text))
     dp.add_handler(MessageHandler(Filters.document.mime_type("text/plain"), check_file))
 
