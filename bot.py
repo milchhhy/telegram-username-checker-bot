@@ -4,11 +4,12 @@ import os
 import tempfile
 import pandas as pd
 
+# Bot-Token aus Umgebungsvariablen (Heroku Config Vars)
 TOKEN = os.getenv("BOT_TOKEN")
 API_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 def check_username(uname: str) -> str:
-    """Prüft Username mit offizieller Telegram-API"""
+    """Prüft, ob Username frei, vergeben oder banned ist"""
     url = f"{API_URL}/getChat?username={uname}"
     try:
         r = requests.get(url, timeout=5)
@@ -16,19 +17,23 @@ def check_username(uname: str) -> str:
     except:
         return "⚠️ Fehler"
 
-    if "ok" in data and data["ok"] is True:
+    # Wenn Chat existiert -> vergeben
+    if data.get("ok"):
         return "❌ Vergeben"
-    elif "description" in data:
-        desc = data["description"].upper()
-        if "USERNAME_NOT_OCCUPIED" in desc:
-            return "✅ Frei"
-        elif "USERNAME_INVALID" in desc:
-            return "🚫 Banned"
-        elif "USERNAME_OCCUPIED" in desc:
-            return "❌ Vergeben"
+
+    # Fehlercodes prüfen
+    desc = data.get("description", "").upper()
+    if "USERNAME_NOT_OCCUPIED" in desc or "CHAT NOT FOUND" in desc:
+        return "✅ Frei"  # 100% claimbar
+    if "USERNAME_INVALID" in desc:
+        return "🚫 Banned"
+    if "USERNAME_OCCUPIED" in desc:
+        return "❌ Vergeben"
+
     return "⚠️ Unbekannt"
 
 def check_text(update, context):
+    """Check von Usernames aus einer Text-Nachricht"""
     usernames = [u.strip("@").lower() for u in update.message.text.split() if len(u) >= 4]
     free_names = [f"@{u}" for u in usernames if check_username(u) == "✅ Frei"]
 
@@ -38,6 +43,7 @@ def check_text(update, context):
         update.message.reply_text("Keine wirklich freien Usernames gefunden.")
 
 def check_file(update, context):
+    """Check von Usernames aus einer hochgeladenen TXT-Datei"""
     file = update.message.document.get_file()
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         file.download(custom_path=tmp.name)
