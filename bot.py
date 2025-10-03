@@ -16,18 +16,14 @@ def check_username(uname: str) -> str:
     except Exception as e:
         return f"⚠️ Fehler: {e}"
 
-    # 🚫 Banned (immer zuerst!)
-    if "this username is not available" in html or "username is not available" in html:
-        return "🚫 Banned"
-
-    # ❌ Vergeben (Profilinfos oder eigenes Bild)
+    # ❌ Vergeben → hat eigenes Profilbild oder Beschreibung
     if "og:image" in html and "t_logo_2x.png" not in html:
         return "❌ Vergeben"
     if "property=\"og:description\" content=" in html and 'content=""' not in html:
         return "❌ Vergeben"
 
-    # ✅ Frei → Standardlogo + leere Beschreibung
-    if 'property="og:description" content=""' in html and "telegram.org/img/t_logo_2x.png" in html:
+    # ⚪ Verfügbar/Banned → Standardlogo + leere Beschreibung
+    if 'property="og:description" content=""' in html and "t_logo_2x.png" in html:
         try:
             frag = requests.get(frag_url, timeout=5)
             frag_html = frag.text.lower()
@@ -35,7 +31,7 @@ def check_username(uname: str) -> str:
                 return "💸 Fragment"
         except:
             pass
-        return "✅ Frei"
+        return "⚪ Verfügbar/Banned"
 
     return "⚠️ Unbekannt"
 
@@ -44,16 +40,14 @@ def check_text(update, context):
     data = [{"username": u, "status": check_username(u)} for u in usernames]
 
     # Gruppierte Ausgabe
-    free = [f"@{d['username']}" for d in data if d['status'] == "✅ Frei"]
+    available = [f"@{d['username']}" for d in data if d['status'] == "⚪ Verfügbar/Banned"]
     frag = [f"@{d['username']}" for d in data if d['status'] == "💸 Fragment"]
     taken = [f"@{d['username']}" for d in data if d['status'] == "❌ Vergeben"]
-    banned = [f"@{d['username']}" for d in data if d['status'] == "🚫 Banned"]
 
     msg = []
-    if free: msg.append("✅ Frei:\n" + " ".join(free))
+    if available: msg.append("⚪ Verfügbar/Banned:\n" + " ".join(available))
     if frag: msg.append("💸 Fragment:\n" + " ".join(frag))
     if taken: msg.append("❌ Vergeben:\n" + " ".join(taken))
-    if banned: msg.append("🚫 Banned:\n" + " ".join(banned))
 
     update.message.reply_text("\n\n".join(msg) if msg else "Keine Ergebnisse.")
 
@@ -72,16 +66,14 @@ def check_file(update, context):
     df.to_csv(out_path, index=False, encoding="utf-8")
 
     # Gruppierte Ausgabe
-    free = [f"@{d['username']}" for d in data if d['status'] == "✅ Frei"]
+    available = [f"@{d['username']}" for d in data if d['status'] == "⚪ Verfügbar/Banned"]
     frag = [f"@{d['username']}" for d in data if d['status'] == "💸 Fragment"]
     taken = [f"@{d['username']}" for d in data if d['status'] == "❌ Vergeben"]
-    banned = [f"@{d['username']}" for d in data if d['status'] == "🚫 Banned"]
 
     msg = []
-    if free: msg.append("✅ Frei:\n" + " ".join(free))
+    if available: msg.append("⚪ Verfügbar/Banned:\n" + " ".join(available))
     if frag: msg.append("💸 Fragment:\n" + " ".join(frag))
     if taken: msg.append("❌ Vergeben:\n" + " ".join(taken))
-    if banned: msg.append("🚫 Banned:\n" + " ".join(banned))
 
     update.message.reply_text("\n\n".join(msg) if msg else "Keine Ergebnisse.")
     with open(out_path, "rb") as f:
@@ -90,8 +82,10 @@ def check_file(update, context):
 def start(update, context):
     update.message.reply_text(
         "Schick mir Usernames (Text oder .txt-Datei).\n"
-        "Ich zeige dir an:\n"
-        "✅ frei\n💸 fragment\n❌ vergeben\n🚫 banned"
+        "Kategorien:\n"
+        "⚪ Verfügbar oder Banned\n"
+        "💸 Fragment\n"
+        "❌ Vergeben"
     )
 
 if __name__ == "__main__":
